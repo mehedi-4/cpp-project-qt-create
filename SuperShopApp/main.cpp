@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QTextStream>
 
+class SuperShopApp;
 class AdminWindow;
 class CustomerWindow;
 
@@ -29,20 +30,30 @@ class AdminWindow : public QWidget {
 public:
     AdminWindow(QWidget *parent = nullptr, QWidget *mainMenu = nullptr);
 
+    QString getAdminPassword() const { return adminPassword; }
+
 private:
     QPushButton *addItemButton;
     QPushButton *modifyItemButton;
     QPushButton *removeItemButton;
     QPushButton *showInventoryButton;
+    QPushButton *changePasswordButton;
     QPushButton *backButton;
     QWidget *mainMenu;
 
+    QString adminPassword;
+    //methods
     void addItem();
     void modifyItem();
     void removeItem();
     void showInventory();
+    void changePassword();
+    void savePasswordToFile(const QString &password);
+    void loadPasswordFromFile();
     void goBack();
 };
+
+
 
 class CustomerWindow : public QWidget {
 public:
@@ -50,14 +61,14 @@ public:
 
 private:
     QPushButton *buyItemButton;
-    QPushButton *findByNameButton; // Button to find by name
-    QPushButton *showInventoryButton; // Button to show inventory
+    QPushButton *findByNameButton;
+    QPushButton *showInventoryButton;
     QPushButton *backButton;
     QWidget *mainMenu;
 
     void buyItem();
-    void findByName(); // Function to find by name
-    void showInventory(); // Function to show inventory
+    void findByName();
+    void showInventory();
     void generateReceipt(const QString &receiptDetails);
     void goBack();
 };
@@ -85,23 +96,22 @@ SuperShopApp::SuperShopApp(QWidget *parent) : QWidget(parent) {
 }
 
 void SuperShopApp::openAdminWindow() {
-    // Ask for username and password
     QString username = QInputDialog::getText(this, "Login", "Enter username:");
     if (username != "admin") {
         QMessageBox::warning(this, "Error", "Invalid username!");
         return;
     }
 
-    QString password = QInputDialog::getText(this, "Login", "Enter password:", QLineEdit::Password); // Password field
-    if (password != "admin") {
+    QString password = QInputDialog::getText(this, "Login", "Enter password:", QLineEdit::Password);
+    if (password != adminWindow->getAdminPassword()) {
         QMessageBox::warning(this, "Error", "Invalid password!");
         return;
     }
 
-    // Open the admin window if credentials are correct
     adminWindow->show();
     this->hide();
 }
+
 
 
 void SuperShopApp::openCustomerWindow() {
@@ -111,27 +121,33 @@ void SuperShopApp::openCustomerWindow() {
 
 AdminWindow::AdminWindow(QWidget *parent, QWidget *mainMenu) : QWidget(parent), mainMenu(mainMenu) {
     setFixedSize(720, 480);
+    loadPasswordFromFile();
+    QVBoxLayout *layout = new QVBoxLayout(this);
+
     addItemButton = new QPushButton("Add Item", this);
     modifyItemButton = new QPushButton("Modify Item", this);
     removeItemButton = new QPushButton("Remove Item", this);
     showInventoryButton = new QPushButton("Show Inventory", this);
-    backButton = new QPushButton("Back to Main Menu", this);
+    changePasswordButton = new QPushButton("Change Password", this);
+    backButton = new QPushButton("Back", this);
 
-    QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(addItemButton);
     layout->addWidget(modifyItemButton);
     layout->addWidget(removeItemButton);
     layout->addWidget(showInventoryButton);
+    layout->addWidget(changePasswordButton);
     layout->addWidget(backButton);
 
     connect(addItemButton, &QPushButton::clicked, this, &AdminWindow::addItem);
     connect(modifyItemButton, &QPushButton::clicked, this, &AdminWindow::modifyItem);
     connect(removeItemButton, &QPushButton::clicked, this, &AdminWindow::removeItem);
     connect(showInventoryButton, &QPushButton::clicked, this, &AdminWindow::showInventory);
+    connect(changePasswordButton, &QPushButton::clicked, this, &AdminWindow::changePassword); // Connect button to method
     connect(backButton, &QPushButton::clicked, this, &AdminWindow::goBack);
 
     setLayout(layout);
 }
+
 
 void AdminWindow::addItem() {
     QString productCode = QInputDialog::getText(this, "Add Item", "Enter product code:");
@@ -161,7 +177,6 @@ void AdminWindow::modifyItem() {
     int newPrice = QInputDialog::getInt(this, "Modify Item", "Enter new price:");
     int newShelfNumber = QInputDialog::getInt(this, "Modify Item", "Enter new shelf number:");
     int newQuantity = QInputDialog::getInt(this, "Modify Item", "Enter new Quantity:");
-
 
     QFile file("inventory.txt");
     QFile tempFile("temp.txt");
@@ -236,7 +251,7 @@ void AdminWindow::showInventory() {
     QString inventoryList;
     QTextStream in(&file);
 
-    QString header = QString("%1 %2 %3 %4 %5\n")
+    QString header = QString("%1  %2 %3 %4 %5\n\n")
                          .arg("Product Code", 10)
                          .arg("Product Name", 10)
                          .arg("Price", 10)
@@ -244,7 +259,6 @@ void AdminWindow::showInventory() {
                          .arg("Quantity",10);
 
     inventoryList += header;
-    inventoryList += QString("-").repeated(60) + "\n";
 
     while (!in.atEnd()) {
         QString line = in.readLine();
@@ -269,6 +283,52 @@ void AdminWindow::showInventory() {
     }
 }
 
+void AdminWindow::changePassword() {
+    QString currentPassword = QInputDialog::getText(this, "Change Password", "Enter current password:", QLineEdit::Password);
+
+    if (currentPassword != adminPassword) {
+        QMessageBox::warning(this, "Error", "Incorrect current password!");
+        return;
+    }
+
+    QString newPassword = QInputDialog::getText(this, "Change Password", "Enter new password:", QLineEdit::Password);
+    QString confirmPassword = QInputDialog::getText(this, "Change Password", "Confirm new password:", QLineEdit::Password);
+
+    if (newPassword != confirmPassword) {
+        QMessageBox::warning(this, "Error", "Passwords do not match!");
+        return;
+    }
+
+    adminPassword = newPassword;
+    savePasswordToFile(adminPassword);
+
+    QMessageBox::information(this, "Success", "Password changed successfully!");
+}
+
+void AdminWindow::savePasswordToFile(const QString &password) {
+    QFile file("password.txt");
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        out << password;
+        file.close();
+    } else {
+        QMessageBox::warning(this, "Error", "Unable to save the password!");
+    }
+}
+
+
+void AdminWindow::loadPasswordFromFile() {
+    QFile file("password.txt");
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&file);
+        adminPassword = in.readLine();
+        file.close();
+    } else {
+        adminPassword = "admin";
+    }
+}
+
+
 void AdminWindow::goBack() {
     this->hide();
     if (mainMenu) {
@@ -279,19 +339,19 @@ void AdminWindow::goBack() {
 CustomerWindow::CustomerWindow(QWidget *parent, QWidget *mainMenu) : QWidget(parent), mainMenu(mainMenu) {
     setFixedSize(720, 480);
     buyItemButton = new QPushButton("Buy Item", this);
-    findByNameButton = new QPushButton("Find by Name", this);  // Button for find by name
-    showInventoryButton = new QPushButton("Show Inventory", this);  // Button for show inventory
+    findByNameButton = new QPushButton("Find by Name", this);
+    showInventoryButton = new QPushButton("Show Inventory", this);
     backButton = new QPushButton("Back to Main Menu", this);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(buyItemButton);
-    layout->addWidget(findByNameButton);  // Add to layout
-    layout->addWidget(showInventoryButton);  // Add to layout
+    layout->addWidget(findByNameButton);
+    layout->addWidget(showInventoryButton);
     layout->addWidget(backButton);
 
     connect(buyItemButton, &QPushButton::clicked, this, &CustomerWindow::buyItem);
-    connect(findByNameButton, &QPushButton::clicked, this, &CustomerWindow::findByName);  // Connect button to function
-    connect(showInventoryButton, &QPushButton::clicked, this, &CustomerWindow::showInventory);  // Connect button to function
+    connect(findByNameButton, &QPushButton::clicked, this, &CustomerWindow::findByName);
+    connect(showInventoryButton, &QPushButton::clicked, this, &CustomerWindow::showInventory);
     connect(backButton, &QPushButton::clicked, this, &CustomerWindow::goBack);
 
     setLayout(layout);
@@ -299,7 +359,7 @@ CustomerWindow::CustomerWindow(QWidget *parent, QWidget *mainMenu) : QWidget(par
 
 
 void CustomerWindow::buyItem() {
-    bool continueShopping = true;  // Loop flag
+    bool continueShopping = true;
     QString receipt;
     int totalPrice = 0;
 
@@ -307,7 +367,7 @@ void CustomerWindow::buyItem() {
         QString productCode = QInputDialog::getText(this, "Buy Item", "Enter product code:");
         if (productCode.isEmpty()) return;
 
-        int quantity = QInputDialog::getInt(this, "Buy Item", "Enter quantity:", 1, 1);  // Default quantity is 1
+        int quantity = QInputDialog::getInt(this, "Buy Item", "Enter quantity:", 1, 1);
 
         QFile file("inventory.txt");
         QFile tempFile("temp.txt");
@@ -316,16 +376,13 @@ void CustomerWindow::buyItem() {
             QTextStream in(&file);
             QTextStream out(&tempFile);
             bool found = false;
-            bool avl = true;
             while (!in.atEnd()) {
                 QString line = in.readLine();
                 QStringList parts = line.split("%20%");
-                //bool avl = true;
                 if (parts[0] == productCode) {
-                    int currentQuantity = parts[4].toInt();  // Quantity at index 4
-                    int price = parts[2].toInt();  // Extract the price
-                    int shelfNumber = parts[3].toInt();  // Shelf number is at index 3
-                    //bool avl = true;
+                    int currentQuantity = parts[4].toInt();
+                    int price = parts[2].toInt();
+                    int shelfNumber = parts[3].toInt();
                     if (currentQuantity >= quantity) {
                         int remainingQuantity = currentQuantity - quantity;
                         out << parts[0] << "%20%" << parts[1] << "%20%" << price << "%20%" << shelfNumber << "%20%" << remainingQuantity << "\n";
@@ -337,12 +394,12 @@ void CustomerWindow::buyItem() {
                         totalPrice += price * quantity;
                         found = true;
                     } else {
-                        avl = false;
                         QMessageBox::information(this, "Buy Item", "Insufficient quantity available.");
-                        out << line << "\n";  // Keep the original line
+                        found = true;
+                        out << line << "\n";
                     }
                 } else {
-                    out << line << "\n";  // Keep the original line if not matching
+                    out << line << "\n";
                 }
             }
 
@@ -351,7 +408,7 @@ void CustomerWindow::buyItem() {
             file.remove();
             tempFile.rename("inventory.txt");
 
-            if (!found && avl) {
+            if (!found) {
                 QMessageBox::information(this, "Buy Item", "Item not found!");
                 return;
             }
@@ -360,17 +417,15 @@ void CustomerWindow::buyItem() {
             return;
         }
 
-        // Ask if the customer wants to buy another item
         QMessageBox::StandardButton reply = QMessageBox::question(this, "Continue Shopping",
                                                                   "Do you want to buy another item?",
                                                                   QMessageBox::Yes | QMessageBox::No);
 
         if (reply == QMessageBox::No) {
-            continueShopping = false;  // Exit loop if customer clicks "No"
+            continueShopping = false;
         }
     }
 
-    // Generate the final receipt after all purchases
     receipt += QString("\nTotal Price: %1\n").arg(totalPrice);
     generateReceipt(receipt);
 }
@@ -397,8 +452,8 @@ void CustomerWindow::findByName() {
     while (!in.atEnd()) {
         QString line = in.readLine();
         QStringList parts = line.split("%20%");
-
-        if (parts.size() == 5 && parts[1].toLower() == productName.toLower()) {  // Case-insensitive comparison
+        //case insensitive comparison
+        if (parts.size() == 5 && parts[1].toLower() == productName.toLower()) {
             productInfo = QString("Product Code: %1\nProduct Name: %2\nPrice: %3\nShelf No.: %4\nQuantity: %5\n")
                               .arg(parts[0])
                               .arg(parts[1])
@@ -429,7 +484,7 @@ void CustomerWindow::showInventory() {
     QString inventoryList;
     QTextStream in(&file);
 
-    QString header = QString("%1   %2   %3   %4   %5\n")
+    QString header = QString("%1   %2   %3   %4   %5\n\n")
                          .arg("Product Code", 10)
                          .arg("Product Name", 10)
                          .arg("Price", 10)
@@ -438,7 +493,6 @@ void CustomerWindow::showInventory() {
 
 
     inventoryList += header;
-    inventoryList += QString("-").repeated(60) + "\n";
 
     while (!in.atEnd()) {
         QString line = in.readLine();
